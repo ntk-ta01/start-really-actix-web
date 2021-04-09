@@ -1,27 +1,30 @@
-use actix_web::{web, App, HttpServer};
-use std::sync::Mutex;
+use actix_web::{web, App, HttpResponse, HttpServer};
 
-struct AppStateWithCounter {
-    counter: Mutex<i32>,
+// this function could be located in a different module
+fn scoped_config(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::resource("/test")
+            .route(web::get().to(|| HttpResponse::Ok().body("test")))
+            .route(web::head().to(|| HttpResponse::MethodNotAllowed())),
+    );
 }
 
-async fn index(data: web::Data<AppStateWithCounter>) -> String {
-    let mut counter = data.counter.lock().unwrap();
-    *counter += 1;
-
-    format!("Request number: {}", counter)
+// this function could be located in a different module
+fn config(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::resource("/app")
+            .route(web::get().to(|| HttpResponse::Ok().body("app")))
+            .route(web::head().to(|| HttpResponse::MethodNotAllowed())),
+    );
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let counter = web::Data::new(AppStateWithCounter {
-        counter: Mutex::new(0),
-    });
-
-    HttpServer::new(move || {
+    HttpServer::new(|| {
         App::new()
-            .app_data(counter.clone())
-            .route("/", web::get().to(index))
+            .configure(config)
+            .service(web::scope("/api").configure(scoped_config))
+            .route("/", web::get().to(|| HttpResponse::Ok().body("/")))
     })
     .bind("127.0.0.1:8080")?
     .run()
